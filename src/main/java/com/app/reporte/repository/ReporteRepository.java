@@ -1,13 +1,7 @@
 package com.app.reporte.repository;
 
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.math.BigDecimal;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -18,10 +12,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -45,6 +35,7 @@ public class ReporteRepository implements IReporteRepository{
 	 private final JdbcTemplate whJdbcTemplate;
 	 private final NamedParameterJdbcTemplate moJdbcTemplate;
 
+
 	    public ReporteRepository(
 	        @Qualifier("datamartNamedJdbc") NamedParameterJdbcTemplate datamartJdbcTemplate,
 	        @Qualifier("whJdbcTemplate") JdbcTemplate whJdbcTemplate,
@@ -55,11 +46,14 @@ public class ReporteRepository implements IReporteRepository{
 	        this.moJdbcTemplate=moJdbcTemplate;
 	    }
     
-	    @Value("${excel.output.path}")
-	    private String rutaDestino;
-	    
-	    @Value("${excel.template.path:/templates/data.xlsx}")
+	    @Value("${excel.output.base-dir}")
+	    private String baseDir;
+
+	    @Value("${excel.template.path}")
 	    private String rutaPlantilla;
+
+	    @Value("${excel.output.filename-prefix:reporte_}")
+	    private String prefix;
     
 	@Override
 	public void obtainReporte() {
@@ -132,53 +126,16 @@ public class ReporteRepository implements IReporteRepository{
 	  List<TarjetaDTO> filtradas = ReporteUtil.filtrarPorPreloanId(resultadoQueryInicial, TarjetaDTO::getPrn, TarjetaDTO::getPreloanExternaId,TarjetaDTO::setPreloanSuffix);
 	    
 	  List<TarjetaDTO> complemento =  this.complementData(filtradas);
+	  
+	  this.generarExcel(complemento);
 	 
-	    this.generarExcel(complemento);
 	}
 	
-	public void generarExcel(List<TarjetaDTO> tarjetas) {
-		 Path destino = Paths.get(rutaDestino);
-		 
-		  // Crear carpeta ANTES de abrir el FileOutputStream
-	        try {
-	            Files.createDirectories(destino.getParent());
-	        } catch (IOException e) {
-	            throw new UncheckedIOException("No se pudo crear el directorio: " + destino.getParent(), e);
-	        }
-	        
-	        
-	        try (InputStream plantillaStream = getClass().getResourceAsStream(rutaPlantilla)) {
-	            if (plantillaStream == null) {
-	                throw new IllegalStateException("No se encontró la plantilla en el classpath: " + rutaPlantilla);
-	            }
-
-	            try (Workbook workbook = new XSSFWorkbook(plantillaStream);
-	                 FileOutputStream fileOut = new FileOutputStream(destino.toFile())) {
-
-	                Sheet sheet = workbook.getSheetAt(0);
-	                int rowNum = 4;
-
-	                for (TarjetaDTO t : tarjetas) {
-	                    Row row = sheet.createRow(rowNum++);
-	                    row.createCell(0).setCellValue(nz(t.getPrn()));
-	                    row.createCell(1).setCellValue(nz(t.getMarca()));
-	                    row.createCell(2).setCellValue(nz(t.getTipo()));
-	                    row.createCell(3).setCellValue(nz(t.getProducto()));
-	                    row.createCell(4).setCellValue(nz(t.getLineaCredito()).doubleValue());
-	                    row.createCell(5).setCellValue(nz(t.getMontoDisposicion()).doubleValue());
-	                    row.createCell(6).setCellValue(nz(t.getTipoDisposicion()));
-	                    row.createCell(7).setCellValue(nz(t.getCanalDisposicion()));
-	                    row.createCell(ReporteUtil.COL_TRANSACCION).setCellValue(nz(t.getTransaccion()));
-	                }
-
-	                workbook.write(fileOut);
-	                System.out.println("Excel generado correctamente en: " + rutaDestino);
-	            }
-	        } catch (IOException e) {
-		        	log.error("Error al generar el Excel");
-		        }
-	}
+	 public Path generarExcel(List<TarjetaDTO> complemento) {
+	        return ReporteUtil.generarExcel(complemento, baseDir, rutaPlantilla, prefix);
+	    }
 	
+
 	public List<TarjetaDTO> complementData(List<TarjetaDTO> tarjetas) {
 		
 	    Map<String, List<TarjetaDTO>> porPrnYTxn = tarjetas.stream()
@@ -270,11 +227,5 @@ public class ReporteRepository implements IReporteRepository{
 	    return t;
 	}
 	
-	private static String nz(String v) {
-	    return v == null ? "" : v; // si es null, devuelve "", de lo contrario devuelve v
-	}
-
-	private static BigDecimal nz(BigDecimal v) {
-	    return v == null ? BigDecimal.ZERO : v; // si es null, devuelve 0
-	}
+	
 }
