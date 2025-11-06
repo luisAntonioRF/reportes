@@ -42,14 +42,17 @@ public class ReporteRepository implements IReporteRepository{
     private static final Logger log = LoggerFactory.getLogger(ReporteRepository.class);
 
 	 private final NamedParameterJdbcTemplate datamartJdbcTemplate;
-	    private final JdbcTemplate whJdbcTemplate;
+	 private final JdbcTemplate whJdbcTemplate;
+	 private final NamedParameterJdbcTemplate moJdbcTemplate;
 
 	    public ReporteRepository(
 	        @Qualifier("datamartNamedJdbc") NamedParameterJdbcTemplate datamartJdbcTemplate,
-	        @Qualifier("whJdbcTemplate") JdbcTemplate whJdbcTemplate
+	        @Qualifier("whJdbcTemplate") JdbcTemplate whJdbcTemplate,
+	        @Qualifier("moNamedJdbc") NamedParameterJdbcTemplate moJdbcTemplate
 	    ) {
 	        this.datamartJdbcTemplate = datamartJdbcTemplate;
 	        this.whJdbcTemplate = whJdbcTemplate;
+	        this.moJdbcTemplate=moJdbcTemplate;
 	    }
     
 	    @Value("${excel.output.path}")
@@ -61,7 +64,10 @@ public class ReporteRepository implements IReporteRepository{
 	@Override
 	public void obtainReporte() {
 		
-		List<TarjetaDTO> resultado=null;
+		List<Map<String, Object>> resultadoQuerySecundario = new ArrayList<>();
+		
+		List<TarjetaDTO> resultadoQueryInicial=null;
+		
 		final ZoneId MX = ZoneId.of("America/Mexico_City");
 
 	    // Día T-1
@@ -82,24 +88,48 @@ public class ReporteRepository implements IReporteRepository{
 	            .addValue("endDate",   end,   java.sql.Types.TIMESTAMP);
 
 	  try {
-		   resultado = datamartJdbcTemplate.query(
-				ReporteUtil.QUERY_INICIAL,
-		            params,
-		            new TarjetaRowMapper()
-		    );
+		   resultadoQueryInicial = datamartJdbcTemplate.query(ReporteUtil.QUERY_INICIAL,params,new TarjetaRowMapper());
 	} catch (Exception e) {
 		 log.error("Error consultando QUERY_INICIAL. Rango {} a {}.", startZdt, endZdt, e);
 	      return;
 	}
 	  
-	  if (resultado == null || resultado.isEmpty()) {
+	  if (resultadoQueryInicial == null || resultadoQueryInicial.isEmpty()) {
 	        log.info("Sin datos para ejecutar el segundo query {} a {}.", startZdt, endZdt);
 	        return;
 	    }
 	  
-	  log.info("Filas obtenidas: {}", resultado.size());
-
-	  List<TarjetaDTO> filtradas = ReporteUtil.filtrarPorPreloanId(resultado, TarjetaDTO::getPrn, TarjetaDTO::getPreloanExternaId,TarjetaDTO::setPreloanSuffix);
+	  log.info("Filas obtenidas: {}", resultadoQueryInicial.size());
+	  
+	
+	  try {
+		    resultadoQuerySecundario = moJdbcTemplate.queryForList(
+		    		ReporteUtil.QUERY_SECUNDARIO ,
+		        Map.of("prns", resultadoQueryInicial.stream()
+		                .map(TarjetaDTO::getPrn)
+		                .collect(Collectors.toList()))
+		    );
+		    
+		    Map<String, Map<String, Object>> porPrn = resultadoQuerySecundario.stream()
+		  	      .collect(Collectors.toMap(
+		  	          r -> (String) r.get("prn"),
+		  	          r -> r
+		  	      ));
+		    
+		    resultadoQueryInicial.forEach(t -> {
+			      Map<String, Object> datos = porPrn.get(t.getPrn());
+			      if (datos != null) {
+			          t.setMarca((String) datos.get("marca"));
+			          t.setTipo((String) datos.get("tipo"));
+			      }
+			  });
+		    
+		} catch (Exception e) {
+		    log.error("Error ejecutando consulta secundaria de marcas/tipos", e);
+		}
+	  
+	 
+	  List<TarjetaDTO> filtradas = ReporteUtil.filtrarPorPreloanId(resultadoQueryInicial, TarjetaDTO::getPrn, TarjetaDTO::getPreloanExternaId,TarjetaDTO::setPreloanSuffix);
 	    
 	  List<TarjetaDTO> complemento =  this.complementData(filtradas);
 	 
@@ -179,7 +209,7 @@ public class ReporteRepository implements IReporteRepository{
 	        }
 	        
 	       try {
-	    	  wh = whJdbcTemplate.queryForList(ReporteUtil.QUERY_SECUNDARIO, prnNew);
+	    	  wh = whJdbcTemplate.queryForList(ReporteUtil.QUERY_FINAL, prnNew);
 		} catch (Exception e) {
 			log.error("Error consultando QUERY_SECUNDARIO. a {}.", e);
 		     

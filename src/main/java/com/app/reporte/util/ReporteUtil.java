@@ -48,29 +48,35 @@ public class ReporteUtil {
     
     
     public static final String QUERY_INICIAL = """
-			SELECT
+			 SELECT
 				  c.external_id        AS prn,
-				  m.brand              AS marca,
-				  m.card_type          AS tipo,
 				  p.name               AS producto,
 				  crl.amount           AS linea_credito,
 				  lo.loan_id           AS transaccion,
 				  pl.external_id       AS preloan_externa_id,
 				  lo.created_dt        AS fact_loans_created_dt
-				FROM datamart.credit_card c
-				JOIN mo.cliente_tarjetas      m   ON m.card_external_id = c.external_id
-				JOIN datamart.fact_account    acc ON acc.ide = c.fact_account_id
-				JOIN datamart.dim_product     p   ON p.product_id = acc.product_id
-				JOIN datamart.credit_line     crl ON crl.fact_account_id = acc.ide
-				JOIN datamart.fact_loans      lo  ON lo.card_account_id = acc.card_account_id
-				JOIN datamart.preloan         pl  ON pl.pre_loan_id  = lo.pre_loan_id
+				FROM db_datamart.credit_card c
+				JOIN db_datamart.fact_account    acc ON acc.ide = c.fact_account_id
+				JOIN db_datamart.dim_product     p   ON p.product_id = acc.product_id
+				JOIN db_datamart.credit_line     crl ON crl.fact_account_id = acc.ide
+				JOIN db_datamart.fact_loans      lo  ON lo.card_account_id = acc.card_account_id
+				JOIN db_datamart.preloan         pl  ON pl.pre_loan_id  = lo.pre_loan_id
 				WHERE  lo.created_dt >= :startDate
-				  AND lo.created_dt <  :endDate
+				  AND lo.created_dt <   :endDate
 											    	""";
     
-    public static final String QUERY_SECUNDARIO = """
+	public static final String QUERY_SECUNDARIO = """
+				SELECT card_external_id AS prn,
+			       brand AS marca,
+			       card_type AS tipo
+			FROM mo.cliente_tarjetas
+			WHERE card_external_id IN (:prns)
+				""";
+    
+    
+    public static final String QUERY_FINAL = """
     		 SELECT billing_amt, otype
-	        FROM wh_event.public.wh_auth
+	        FROM eventos_mo.public.wh_auth
 	        WHERE auth_id = ?
 	        ORDER BY id   -- usa created_dt si existe; evita ordenar por monto
     		""";

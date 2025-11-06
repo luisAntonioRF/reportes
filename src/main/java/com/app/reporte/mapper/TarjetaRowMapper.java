@@ -14,8 +14,8 @@ public class TarjetaRowMapper implements RowMapper<TarjetaDTO>{
 		
 		TarjetaDTO dto = new TarjetaDTO();
         dto.setPrn(rs.getString("prn"));
-        dto.setMarca(rs.getString("marca"));
-        dto.setTipo(rs.getString("tipo"));
+        //dto.setMarca(rs.getString("marca"));
+        //dto.setTipo(rs.getString("tipo"));
         dto.setProducto(rs.getString("producto"));
         dto.setLineaCredito(rs.getBigDecimal("linea_credito"));
         dto.setTransaccion(rs.getString("transaccion"));

@@ -14,15 +14,15 @@ public class ReporteController {
 	@Autowired
 	IReporteService reporteService;
 	
-	/*@GetMapping("/get-reporte")
+	@GetMapping("/get-reporte")
 	public ResponseEntity<?>obtainReporte(){
 		reporteService.obtainReport();
 		return null;
-	}*/
+	}
 	
-	@Scheduled(cron = "${job.cron.expression}")
+	/*@Scheduled(cron = "${job.cron.expression}")
 	public void obtainReporte(){
 		reporteService.obtainReport();
 		
-	}
+	}*/
 }
