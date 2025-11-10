@@ -17,4 +17,10 @@ public class ReporteService implements IReporteService{
 		reporteRepository.obtainReporte();
 	}
 
+	@Override
+	public void obtainReporteColocacion() {
+		reporteRepository.obtainReporteColocacionRepository();
+		
+	}
+
 }
