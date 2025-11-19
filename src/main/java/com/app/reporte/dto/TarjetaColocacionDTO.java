@@ -2,7 +2,7 @@ package com.app.reporte.dto;
 
 public class TarjetaColocacionDTO extends TarjetaDTO{
 
-	private Integer idCliente;
+	private String idCliente;
 
 	private String nombre;
 		
@@ -21,11 +21,13 @@ public class TarjetaColocacionDTO extends TarjetaDTO{
 		this.tarjeta = tarjeta;
 	}
 
-	public Integer getIdCliente() {
+	
+
+	public String getIdCliente() {
 		return idCliente;
 	}
 
-	public void setIdCliente(Integer idCliente) {
+	public void setIdCliente(String idCliente) {
 		this.idCliente = idCliente;
 	}
 

@@ -200,7 +200,7 @@ public class ReporteRepository implements IReporteRepository {
 		log.info("Filas obtenidas: {}", resultadoQueryInicialV2.size());
 
 		try {
-			resultadoQuerySecundario = moJdbcTemplate.queryForList(ReporteUtil.QUERY_SECUNDARIO, Map.of("prns",
+			resultadoQuerySecundario = moJdbcTemplate.queryForList(ReporteUtil.QUERY_SECUNDARIO_V2, Map.of("prns",
 					resultadoQueryInicialV2.stream().map(TarjetaDTO::getPrn).collect(Collectors.toList())));
 
 			Map<String, Map<String, Object>> porPrn = resultadoQuerySecundario.stream()
@@ -211,6 +211,7 @@ public class ReporteRepository implements IReporteRepository {
 				if (datos != null) {
 					t.setMarca((String) datos.get("marca"));
 					t.setTipo((String) datos.get("tipo"));
+					t.setTarjeta((String) datos.get("tarjeta"));
 				}
 			});
 
@@ -219,10 +220,10 @@ public class ReporteRepository implements IReporteRepository {
 		}
 
 		List<TarjetaColocacionDTO> filtradas = ReporteUtil.<TarjetaColocacionDTO>filtrarPorPreloanId(
-				resultadoQueryInicialV2, // List<TarjetaColocacionDTO>
-				TarjetaColocacionDTO::getPrn, // Function<T,String>
-				TarjetaColocacionDTO::getPreloanExternaId, // Function<T,String>
-				(t, s) -> t.setPreloanSuffix(s) // BiConsumer<T,String>
+				resultadoQueryInicialV2, 
+				TarjetaColocacionDTO::getPrn, 
+				TarjetaColocacionDTO::getPreloanExternaId, 
+				(t, s) -> t.setPreloanSuffix(s) 
 		);
 
 		List<TarjetaColocacionDTO> respV2 = this.complementoColocacionData(filtradas);

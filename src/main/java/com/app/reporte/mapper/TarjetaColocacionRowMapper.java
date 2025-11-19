@@ -14,7 +14,7 @@ public class TarjetaColocacionRowMapper implements RowMapper<TarjetaColocacionDT
 		TarjetaColocacionDTO dto = new TarjetaColocacionDTO();
 		 dto.setProducto(rs.getString("producto"));
 		 dto.setPrn(rs.getString("prn"));
-		 dto.setIdCliente(rs.getInt("id_cliente"));
+		 dto.setIdCliente(rs.getString("id_cliente"));
 		 dto.setNombre(rs.getString("nombre"));
 		 dto.setNumeroCliente(rs.getString("numero_cliente"));
 		 dto.setCuentaAsociada(rs.getString("cuenta_asociada"));

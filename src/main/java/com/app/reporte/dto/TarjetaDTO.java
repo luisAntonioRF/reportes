@@ -17,8 +17,8 @@ public class TarjetaDTO {
 	  private String tipoDisposicion;
 	  private String canalDisposicion;
 	  private String preloanSuffix;
+	 
 	  
-    
 	  
 	public String getPreloanSuffix() {
 		return preloanSuffix;

@@ -80,7 +80,7 @@ public class ReporteUtil {
 
         String year = String.valueOf(now.getYear());
         String month = String.format("%02d", now.getMonthValue());
-        String ts = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss").format(now);
+        String ts = DateTimeFormatter.ofPattern("yyyyMMdd").format(now);
 
         Path dir = Paths.get(baseDir, year, month);
         String fileName = prefix + ts + ".xlsx";          
@@ -160,7 +160,7 @@ public class ReporteUtil {
     public static final String QUERY_INICIAL_V2 = """
 			 SELECT
 				  c.external_id        AS prn,
-				  cus.id               AS id_cliente,
+				  cus.customer_id      AS id_cliente,
 				  cus.display_name     AS nombre,
 				  cus.manage_external_id AS numero_cliente,
 				  acc.card_account_id  AS cuenta_asociada,
@@ -185,9 +185,20 @@ public class ReporteUtil {
 				SELECT card_external_id AS prn,
 			       brand AS marca,
 			       card_type AS tipo
-			FROM mo.cliente_tarjetas
+			FROM mo_demo.cliente_tarjetas
 			WHERE card_external_id IN (:prns)
 				""";
+	
+    
+	 
+		public static final String QUERY_SECUNDARIO_V2 = """
+					SELECT card_external_id AS prn,
+				       brand AS marca,
+				       card_type AS tipo,
+				       card_number AS tarjeta
+				FROM mo_demo.cliente_tarjetas
+				WHERE card_external_id IN (:prns)
+					""";
     
     
     public static final String QUERY_FINAL = """
@@ -239,7 +250,7 @@ public class ReporteUtil {
 
         String year = String.valueOf(now.getYear());
         String month = String.format("%02d", now.getMonthValue());
-        String ts = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss").format(now);
+        String ts = DateTimeFormatter.ofPattern("yyyyMMdd").format(now);
 
         Path dir = Paths.get(baseDir, year, month);
         String fileName = prefix + ts + ".xlsx";          
@@ -353,6 +364,7 @@ public class ReporteUtil {
  		t.setMontoDisposicion(src.getMontoDisposicion());
  		t.setTipoDisposicion(src.getTipoDisposicion());
  		t.setCanalDisposicion(src.getCanalDisposicion());
+ 		t.setTarjeta(src.getTarjeta());
  		return t;
  	}
 }
