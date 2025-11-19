@@ -80,9 +80,11 @@ public class ReporteUtil {
 
         String year = String.valueOf(now.getYear());
         String month = String.format("%02d", now.getMonthValue());
+        String day = String.format("%02d", now.getDayOfMonth());
+        
         String ts = DateTimeFormatter.ofPattern("yyyyMMdd").format(now);
 
-        Path dir = Paths.get(baseDir, year, month);
+        Path dir = Paths.get(baseDir, year, month, day);
         String fileName = prefix + ts + ".xlsx";          
         Path destino = dir.resolve(fileName);
 
@@ -202,7 +204,7 @@ public class ReporteUtil {
     
     
     public static final String QUERY_FINAL = """
-    		 SELECT billing_amt, otype
+    		 SELECT amount, otype
 	        FROM eventos_mo.public.wh_auth
 	        WHERE auth_id = ?
 	        ORDER BY id  
@@ -243,17 +245,19 @@ public class ReporteUtil {
             List<TarjetaColocacionDTO> tarjetas,
             String baseDir,
             String rutaPlantilla2,   
-            String prefix           
+            String prefix2           
     ) {
         ZoneId MX = ZoneId.of("America/Mexico_City");
         ZonedDateTime now = ZonedDateTime.now(MX);
 
         String year = String.valueOf(now.getYear());
         String month = String.format("%02d", now.getMonthValue());
+        String day = String.format("%02d", now.getDayOfMonth());  
+        
         String ts = DateTimeFormatter.ofPattern("yyyyMMdd").format(now);
 
-        Path dir = Paths.get(baseDir, year, month);
-        String fileName = prefix + ts + ".xlsx";          
+        Path dir = Paths.get(baseDir, year, month, day);
+        String fileName = prefix2 + ts + ".xlsx";          
         Path destino = dir.resolve(fileName);
 
         try {

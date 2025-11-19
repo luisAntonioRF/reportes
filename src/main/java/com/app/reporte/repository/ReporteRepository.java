@@ -51,8 +51,11 @@ public class ReporteRepository implements IReporteRepository {
 	@Value("${excel.template.path2}")
 	private String rutaPlantilla2;
 
-	@Value("${excel.output.filename-prefix:reporte_}")
+	@Value("${excel.output.filename-prefix}")
 	private String prefix;
+	
+	@Value("${excel.output.filename-prefix2}")
+	private String prefix2;
 
 	@Override
 	public void obtainReporte() {
@@ -150,7 +153,7 @@ public class ReporteRepository implements IReporteRepository {
 
 			for (Map<String, Object> fila : wh) {
 				TarjetaDTO t = ReporteUtil.copyOf(plantilla);
-				BigDecimal monto = ReporteUtil.asBigDecimal(fila.get("billing_amt"));
+				BigDecimal monto = ReporteUtil.asBigDecimal(fila.get("amount"));
 				if (monto != null)
 					t.setMontoDisposicion(monto);
 
@@ -232,7 +235,7 @@ public class ReporteRepository implements IReporteRepository {
 	}
 
 	public Path generarExcelV2(List<TarjetaColocacionDTO> complemento) {
-		return ReporteUtil.generarExcelV2(complemento, baseDir, rutaPlantilla2, prefix);
+		return ReporteUtil.generarExcelV2(complemento, baseDir, rutaPlantilla2, prefix2);
 	}
 
 	public List<TarjetaColocacionDTO> complementoColocacionData(List<TarjetaColocacionDTO> tarjetas) {
@@ -273,7 +276,7 @@ public class ReporteRepository implements IReporteRepository {
 
 			for (Map<String, Object> fila : wh) {
 				TarjetaColocacionDTO t = ReporteUtil.copyOfV2(plantilla);
-				BigDecimal monto = ReporteUtil.asBigDecimal(fila.get("billing_amt"));
+				BigDecimal monto = ReporteUtil.asBigDecimal(fila.get("amount"));
 				if (monto != null)
 					t.setMontoDisposicion(monto);
 
