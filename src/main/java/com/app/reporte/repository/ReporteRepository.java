@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -17,10 +18,12 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import com.app.reporte.dto.AccountReportWalletDTO;
 import com.app.reporte.dto.TarjetaColocacionDTO;
 import com.app.reporte.dto.TarjetaDTO;
-import com.app.reporte.mapper.TarjetaRowMapper;
 import com.app.reporte.mapper.TarjetaColocacionRowMapper;
+import com.app.reporte.mapper.TarjetaRowMapper;
+import com.app.reporte.mapper.WalletReportRowMapper;
 import com.app.reporte.util.OtypeCanalCatalog;
 import com.app.reporte.util.OtypeTipoCatalog;
 import com.app.reporte.util.ReporteUtil;
@@ -50,12 +53,18 @@ public class ReporteRepository implements IReporteRepository {
 	
 	@Value("${excel.template.path2}")
 	private String rutaPlantilla2;
+	
+	@Value("${excel.template.path3}")
+	private String rutaPlantilla3;
 
 	@Value("${excel.output.filename-prefix}")
 	private String prefix;
 	
 	@Value("${excel.output.filename-prefix2}")
 	private String prefix2;
+	
+	@Value("${excel.output.filename-prefix3}")
+	private String prefix3;
 
 	@Override
 	public void obtainReporte() {
@@ -294,6 +303,38 @@ public class ReporteRepository implements IReporteRepository {
 		}
 
 		return out;
+	}
+
+	/*
+	 * REPORTE #3
+	 * */
+
+	@Override
+	public void obtainReporteCarteraRepository() {
+		
+	
+		List<AccountReportWalletDTO> resultadoQueryInicial = null;
+		
+		MapSqlParameterSource params = ReporteUtil.getYesterdayRangeParams();
+		
+		try {
+			resultadoQueryInicial = datamartJdbcTemplate.query(ReporteUtil.QUERY_INICIAL_V3, params,
+					new WalletReportRowMapper());
+		} catch (Exception e) {
+			log.error("Error consultando QUERY_INICIAL_Wallet con parámetros: startDate={}, endDate={}. Causa: {}",
+					params.getValue("startDate"), params.getValue("endDate"), e.getMessage(), e);
+
+		}
+		
+		if (resultadoQueryInicial == null || resultadoQueryInicial.isEmpty()) {
+			log.error("Sin datos para ejecutar el primer query Wallet. {}");
+			return;
+		}
+		
+		log.info("Filas obtenidas: {}", resultadoQueryInicial.size());
+		
+		
+		ReporteUtil.generarExcelWallet(resultadoQueryInicial, baseDir, rutaPlantilla3, prefix3);
 	}
 
 

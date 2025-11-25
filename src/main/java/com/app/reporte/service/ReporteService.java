@@ -23,4 +23,10 @@ public class ReporteService implements IReporteService{
 		
 	}
 
+	@Override
+	public void obtainReporteCartera() {
+		reporteRepository.obtainReporteCarteraRepository();
+		
+	}
+
 }

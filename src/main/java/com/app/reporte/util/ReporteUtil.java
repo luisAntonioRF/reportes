@@ -25,6 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 
+import com.app.reporte.dto.AccountReportWalletDTO;
 import com.app.reporte.dto.TarjetaColocacionDTO;
 import com.app.reporte.dto.TarjetaDTO;
 
@@ -181,6 +182,58 @@ public class ReporteUtil {
 				WHERE  lo.created_dt >= :startDate
 				  AND lo.created_dt <   :endDate
 											    	""";
+    
+    public static final String QUERY_INICIAL_V3 = """
+SELECT
+    acc.ide               AS account_id,       
+    acc.created_dt        AS fecha,            
+    c.external_id         AS prn,
+    cus.manage_external_id AS num_cliente,
+    acc.card_account_id   AS cuenta_asociada,
+    p.name                AS producto,
+    crl.amount            AS linea_credito,
+    CASE
+        WHEN acc.days_on_default > 90 THEN 'Vencido'
+        ELSE 'Vigente'
+    END AS status,
+    acc.days_on_default   AS dias_vencido,
+     CASE
+        WHEN acc.days_on_default BETWEEN 1 AND 30 THEN 1
+        WHEN acc.days_on_default BETWEEN 31 AND 90 THEN 2
+        WHEN acc.days_on_default > 90 THEN 3
+        ELSE 0
+    END AS etapa,
+    ppg.expected_at       AS fecha_pago,
+    ppg.amount            AS pago_exigible,
+    acc.total_debt_amount AS capital_no_exigible,
+    ppg.amount            AS capital_exigible,
+    CASE
+        WHEN acc.days_on_default > 90 THEN COALESCE(iex.total_intereses, 0)
+        ELSE 0
+    END AS interes_exigible,
+    COALESCE(ipt.intereses_moratorios, 0) AS intereses_moratorios
+FROM db_datamart.credit_card c
+JOIN db_datamart.fact_account acc
+  ON acc.ide = c.fact_account_id
+JOIN db_datamart.dim_customer cus
+  ON acc.customer_id = cus.customer_id
+JOIN (
+    SELECT DISTINCT product_id, name
+    FROM db_datamart.dim_product
+) p
+  ON p.product_id = acc.product_id
+JOIN db_datamart.credit_line crl
+  ON crl.fact_account_id = acc.ide
+JOIN db_datamart.payment_promise_group ppg
+  ON acc.ide = ppg.fact_account_id
+LEFT JOIN db_datamart.vw_intereses_moratorios ipt
+  ON ipt.fact_account_id = acc.ide
+LEFT JOIN db_datamart.vw_total_intereses_por_cuenta iex
+  ON iex.account_id = acc.ide
+WHERE acc.created_dt >=  :startDate
+  AND acc.created_dt <   :endDate
+											    	""";
+    
     
     
 	public static final String QUERY_SECUNDARIO = """
@@ -370,5 +423,69 @@ public class ReporteUtil {
  		t.setCanalDisposicion(src.getCanalDisposicion());
  		t.setTarjeta(src.getTarjeta());
  		return t;
+ 	}
+ 	
+ 	public static void generarExcelWallet(List<AccountReportWalletDTO> account ,String baseDir,String rutaPlantilla,String prefix) {
+ 		
+ 		ZoneId MX = ZoneId.of("America/Mexico_City");
+        ZonedDateTime now = ZonedDateTime.now(MX);
+
+        String year = String.valueOf(now.getYear());
+        String month = String.format("%02d", now.getMonthValue());
+        String day = String.format("%02d", now.getDayOfMonth());
+        
+        String ts = DateTimeFormatter.ofPattern("yyyyMMdd").format(now);
+
+        Path dir = Paths.get(baseDir, year, month, day);
+        String fileName = prefix + ts + ".xlsx";          
+        Path destino = dir.resolve(fileName);
+
+        try {
+            Files.createDirectories(dir);
+        } catch (IOException e) {
+        	log.error("No se pudo crear el directorio: {}", dir, e);
+        }
+        
+        try (InputStream plantillaStream = ReporteUtil.class.getResourceAsStream(rutaPlantilla)) {
+            if (plantillaStream == null) {
+                throw new IllegalStateException("No se encontró la plantilla en el classpath: " + rutaPlantilla);
+            }
+
+            try (Workbook workbook = new XSSFWorkbook(plantillaStream);
+                 FileOutputStream fileOut = new FileOutputStream(destino.toFile())) {
+
+                Sheet sheet = workbook.getSheetAt(0);
+                int rowNum = 4;
+
+                for (AccountReportWalletDTO t : account) {
+                    Row row = sheet.createRow(rowNum++);
+                    row.createCell(0).setCellValue(nz("514817XXXXXX9087"));
+                    row.createCell(1).setCellValue(nz(t.getPrn()));
+                    row.createCell(2).setCellValue(nz(t.getNumCliente()));
+                    row.createCell(3).setCellValue(nz(t.getCuentaAsociada()));
+                    row.createCell(4).setCellValue(nz(t.getProducto()));
+                    row.createCell(5).setCellValue(nz(t.getLineaCredito()).doubleValue());
+                    row.createCell(6).setCellValue(nz(t.getStatus()));
+                    row.createCell(7).setCellValue(nz(t.getDiasVencido()));
+                    row.createCell(8).setCellValue(nz(t.getEtapa()));
+                    row.createCell(9).setCellValue((t.getFechaPago()));
+                    row.createCell(10).setCellValue(nz(t.getPagoExigible()).doubleValue());
+                    row.createCell(11).setCellValue(nz(t.getCapitalNoExigible()).doubleValue());
+                    row.createCell(12).setCellValue(nz(t.getCapitalExigible()).doubleValue());
+                    row.createCell(13).setCellValue(nz(t.getInteresExigible()).doubleValue());
+                    row.createCell(14).setCellValue(nz(t.getInteresesCuentasBalances()).doubleValue());
+                    row.createCell(15).setCellValue(nz(t.getInteresesCuentasOrden()).doubleValue());
+                    row.createCell(16).setCellValue(nz(t.getInteresesMoratorios()).doubleValue());
+                    
+                }
+                workbook.write(fileOut);
+                log.info("Excel generado correctamente en: {}", destino);
+            }
+        } catch (IOException e) {
+        	log.error("Error generando Excel en {}", destino, e);
+          
+        }
+        
+        
  	}
 }
