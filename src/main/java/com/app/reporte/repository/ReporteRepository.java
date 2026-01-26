@@ -7,8 +7,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -17,8 +17,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
-
 import com.app.reporte.dto.AccountReportWalletDTO;
+import com.app.reporte.dto.InteresCuentaDTO;
+import com.app.reporte.dto.SumOfInterestDto;
 import com.app.reporte.dto.TarjetaColocacionDTO;
 import com.app.reporte.dto.TarjetaDTO;
 import com.app.reporte.mapper.TarjetaColocacionRowMapper;
@@ -315,11 +316,12 @@ public class ReporteRepository implements IReporteRepository {
 	
 		List<AccountReportWalletDTO> resultadoQueryInicial = null;
 		
+		List<AccountReportWalletDTO> resultadoV2 = new ArrayList<AccountReportWalletDTO>();
+		
 		MapSqlParameterSource params = ReporteUtil.getYesterdayRangeParams();
 		
 		try {
-			resultadoQueryInicial = datamartJdbcTemplate.query(ReporteUtil.QUERY_INICIAL_V3, params,
-					new WalletReportRowMapper());
+			resultadoQueryInicial = datamartJdbcTemplate.query(ReporteUtil.QUERY_INICIAL_V3,new WalletReportRowMapper());
 		} catch (Exception e) {
 			log.error("Error consultando QUERY_INICIAL_Wallet con parámetros: startDate={}, endDate={}. Causa: {}",
 					params.getValue("startDate"), params.getValue("endDate"), e.getMessage(), e);
@@ -334,8 +336,247 @@ public class ReporteRepository implements IReporteRepository {
 		log.info("Filas obtenidas: {}", resultadoQueryInicial.size());
 		
 		
-		ReporteUtil.generarExcelWallet(resultadoQueryInicial, baseDir, rutaPlantilla3, prefix3);
+		try {
+			
+			
+		    for (AccountReportWalletDTO item : resultadoQueryInicial) {
+		    	
+		    	/*
+		    	 * Obtiene la tarjeta
+		    	 * */
+		    	String cardNumber = getCard(item.getPrn());
+		    	 item.setCard(cardNumber);
+		    	 
+		    	 /*
+		    	  *Se complementa el campo: intereses moratorios 
+		    	  * */
+		    	 
+		    	 BigDecimal totalDefaultInterest = obtainInteresMoratorio(item.getAccountId());
+		    	 item.setInteresesMoratorios(totalDefaultInterest);
+		    	 
+		    	
+		    	 /*
+		    	  * Se obtine el interes exigible
+		    	  * */
+		    	 
+		    	SumOfInterestDto response = obtainInterest(item.getAccountId());
+		    	item.setInteresExigible(response.getInterest_total());
+		    	
+		    	
+		    	if(item.getDiasVencido()>90 && item.getDiasVencido()<92) {
+		    		item.setInteresesCuentasBalances(item.getInteresExigible());
+		    		
+		    		MapSqlParameterSource paramsInsert = new MapSqlParameterSource()
+		    			    .addValue("prn", item.getPrn())
+		    			    .addValue("factAccountId", item.getAccountId())
+		    			    .addValue("interesCuentaBalance", item.getInteresExigible())
+		    			    .addValue("interesCuentaOrden", 0);
+
+		    		datamartJdbcTemplate.update(ReporteUtil.QUERY_INSERT_INTERES_CUENTA, paramsInsert);
+		    		
+		    	}
+		    	
+		    	if (item.getDiasVencido() > 92) {
+		    	    try {
+		    	    	SumOfInterestDto response2 = obtainInterest(item.getAccountId());
+		    	    	
+		    	        MapSqlParameterSource paramsInterest = new MapSqlParameterSource("factAccountId", item.getAccountId());
+
+		    	        List<Map<String, Object>> rows = datamartJdbcTemplate.queryForList(ReporteUtil.QUERY_INTERES_CUENTA,paramsInterest);
+
+		    	        for (Map<String, Object> row : rows) {
+		    	        	
+		    	            BigDecimal interesBalance = new BigDecimal(row.get("interes_cuenta_balance").toString());
+
+		    	            BigDecimal interesOrden = response2.getInterest_total().subtract(interesBalance);
+		    	            
+		    	            MapSqlParameterSource paramsUpdate = new MapSqlParameterSource()
+			    	        	    .addValue("interesOrden", interesOrden)
+			    	        	    .addValue("factAccountId", item.getAccountId());
+		    	            
+		    	            int rowsAffected = datamartJdbcTemplate.update(ReporteUtil.UPDATE_INTERES_CUENTA, paramsUpdate);
+		    	            
+		    	            if(rowsAffected>0) {
+		    	            	System.out.println("Cambios aplicados.");
+		    	            }
+		    	            
+		    	            item.setInteresesCuentasOrden(interesOrden);
+		    	        }
+		    	        
+		    	       
+		    	        
+		    	    } catch (Exception e) {
+		    	        e.printStackTrace();
+		    	    }
+		    	}
+		    	
+		    	/*
+		    	 * 
+		    	 * CASO #1 Cliente recibe el pag0
+		    	 * */
+		    	BigDecimal interesExigibleTemp =  item.getInteresExigible();
+		    	
+		    	InteresCuentaDTO  respInteresCuenta = obtainNewTableInteresCuenta(item.getAccountId());
+		    	
+		    	BigDecimal balanceMasOrden = respInteresCuenta.getInteresCuentaBalance().add(respInteresCuenta.getInteresCuentaOrden());
+		    	
+		    	//interesExigible < balanceMasOrden
+		    	if (interesExigibleTemp.compareTo(balanceMasOrden) < 0) {
+		    		
+		    		// balanceMasOrden - interesExigibleTemp
+		    		BigDecimal interesExigibleFinal = safe(interesExigibleTemp).subtract(safe(balanceMasOrden));
+		    		
+		    		//interes_cuenta_balance - interesExigibleFinal
+		    		BigDecimal interesRemanente = safe(item.getInteresesCuentasBalances()).subtract(safe(interesExigibleFinal));
+		    		
+		    		 MapSqlParameterSource paramsUpdate = new MapSqlParameterSource()
+		    	        	    .addValue("interesBalance", interesRemanente)
+		    	        	    .addValue("factAccountId", item.getAccountId());
+	    	            
+	    	             datamartJdbcTemplate.update(ReporteUtil.UPDATE_INTERES_CUENTA_BALANCE, paramsUpdate);
+	    	             
+	    	             item.setInteresesCuentasBalances(interesRemanente);
+		    	}
+		    	
+		    	
+		    	/*
+		    	 * Caso #2 Liquidado
+		    	 * */
+		    	if (interesExigibleTemp.compareTo(BigDecimal.ZERO) == 0 && item.getDiasVencido() == 0) {
+		    		
+		    		MapSqlParameterSource paramsDelete = new MapSqlParameterSource("id", respInteresCuenta.getId());
+		    		datamartJdbcTemplate.update(ReporteUtil.DELETE_INTERES_CUENTA_BY_ID, paramsDelete);
+
+		    	}
+		    		
+		    	resultadoV2.add(item);
+		    }
+		    
+		   
+
+		    
+		} catch (Exception e) {
+		    e.printStackTrace();
+		}
+		
+		ReporteUtil.generarExcelWallet(resultadoV2, baseDir, rutaPlantilla3, prefix3);
+	}
+	
+	
+	public BigDecimal obtainInteresMoratorio(Integer accountId) {
+		
+		MapSqlParameterSource params = new MapSqlParameterSource("accountId", accountId);
+
+	    return datamartJdbcTemplate.queryForObject(
+	            ReporteUtil.INTERES_MORATORIO_SUM,
+	            params,
+	            BigDecimal.class
+	    );
+		
 	}
 
+	public InteresCuentaDTO obtainNewTableInteresCuenta(Integer accountId) {
+
+		MapSqlParameterSource paramsInterest = new MapSqlParameterSource("factAccountId", accountId);
+
+		List<Map<String, Object>> rows = datamartJdbcTemplate.queryForList(ReporteUtil.QUERY_INTERES_CUENTA,paramsInterest);
+
+		if (rows.isEmpty()) {
+	        InteresCuentaDTO dto = new InteresCuentaDTO();
+	        dto.setId(null); 
+	        dto.setPrn(null);
+	        dto.setFactAccountId(accountId); 
+	        dto.setInteresCuentaBalance(BigDecimal.ZERO);
+	        dto.setInteresCuentaOrden(BigDecimal.ZERO);
+	        return dto;
+	    }
+
+		Map<String, Object> row = rows.get(0);
+		
+		Integer id = ((Number) row.get("id")).intValue();
+		
+		String card = ((String) row.get("prn"));
+		
+		Integer factAccountId = ((Number) row.get("fact_account_id")).intValue();
+
+		BigDecimal interesBalance = row.get("interes_cuenta_balance") == null ? BigDecimal.ZERO
+				: (BigDecimal) row.get("interes_cuenta_balance");
+
+		BigDecimal interesOrden = row.get("interes_cuenta_orden") == null ? BigDecimal.ZERO
+				: (BigDecimal) row.get("interes_cuenta_orden");
+
+		InteresCuentaDTO dto = new InteresCuentaDTO();
+
+		dto.setId(id);
+		dto.setPrn(card);
+		dto.setFactAccountId(factAccountId);
+		dto.setInteresCuentaBalance(interesBalance);
+		dto.setInteresCuentaOrden(interesOrden);
+
+		return dto;
+	}
+	
+	
+	private BigDecimal safe(BigDecimal v) {
+	    return v == null ? BigDecimal.ZERO : v;
+	}
+	
+	/*
+	 * Consultamos MO para complementar con la tarjeta
+	 * Obtain card
+	 * 
+	 * */
+	
+	
+	public String getCard(String prn){
+		
+		
+		String sql = """
+			    SELECT card_number
+			    FROM cliente_tarjetas
+			    WHERE card_external_id = :prn
+			    LIMIT 1
+			""";
+    	
+    	
+   	 List<String> cards = moJdbcTemplate.query(
+   		        sql,
+   		        Map.of("prn", prn),
+   		        (rs, rowNum) -> rs.getString("card_number")
+   		    );
+   	 
+   	    String cardNumber = cards.isEmpty() ? null : cards.get(0);
+   	    
+		return cardNumber;
+	}
+	
+	/*
+	 * Se obtine el interes exigible
+	 * interest_total = interest_revolving + interest_fixed
+	 * */
+
+	public  SumOfInterestDto obtainInterest(Integer inFactAccountId) {
+		
+		      SumOfInterestDto sumOfInterestDto =  new SumOfInterestDto();
+		try {
+			MapSqlParameterSource paramsInterest = new MapSqlParameterSource("factAccountId", inFactAccountId);
+
+			Map<String, Object> row = datamartJdbcTemplate.queryForMap(ReporteUtil.QUERY_CONSULTA_INTEREST, paramsInterest);
+			Integer factAccountId = ((Number) row.get("fact_account_id")).intValue();
+			BigDecimal interestRevolving = (BigDecimal) row.get("interest_revolving");
+			BigDecimal interestFixed     =  (BigDecimal) row.get("interest_fixed");
+			BigDecimal interestTotal     = (BigDecimal) row.get("interest_total");
+			
+			sumOfInterestDto.setFact_account_id(factAccountId);
+			sumOfInterestDto.setInterest_revolving(interestRevolving);
+			sumOfInterestDto.setInterest_fixed(interestFixed);
+			sumOfInterestDto.setInterest_total(interestTotal);
+			
+			return sumOfInterestDto;
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
 
 }

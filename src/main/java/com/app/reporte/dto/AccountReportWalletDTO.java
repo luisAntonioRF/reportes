@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 
 public class AccountReportWalletDTO {
 
-	private Long accountId;           // account_id
+	private Integer accountId;           // account_id
     private String fecha;             // fecha
     private String card;
     private String prn;               // prn
@@ -32,10 +32,11 @@ public class AccountReportWalletDTO {
 	public void setCard(String card) {
 		this.card = card;
 	}
-	public Long getAccountId() {
+
+	public Integer getAccountId() {
 		return accountId;
 	}
-	public void setAccountId(Long accountId) {
+	public void setAccountId(Integer accountId) {
 		this.accountId = accountId;
 	}
 	public String getFecha() {

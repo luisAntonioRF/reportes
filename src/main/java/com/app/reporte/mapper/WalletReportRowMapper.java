@@ -11,6 +11,7 @@ public class WalletReportRowMapper implements RowMapper<AccountReportWalletDTO>{
 	@Override
 	public AccountReportWalletDTO mapRow(ResultSet rs, int rowNum) throws SQLException {
 		AccountReportWalletDTO dto= new AccountReportWalletDTO();
+		dto.setAccountId(rs.getInt("account_id"));
 		dto.setPrn(rs.getString("prn"));
 		dto.setNumCliente(rs.getString("num_cliente"));
 		dto.setCuentaAsociada(rs.getString("cuenta_asociada"));
@@ -23,8 +24,9 @@ public class WalletReportRowMapper implements RowMapper<AccountReportWalletDTO>{
 		dto.setPagoExigible(rs.getBigDecimal("pago_exigible"));
 		dto.setCapitalNoExigible(rs.getBigDecimal("capital_no_exigible"));
 		dto.setCapitalExigible(rs.getBigDecimal("capital_exigible"));
-		dto.setInteresExigible(rs.getBigDecimal("interes_exigible"));
-		dto.setInteresesMoratorios(rs.getBigDecimal("intereses_moratorios"));
+		
+		//dto.setInteresExigible(rs.getBigDecimal("interes_exigible"));
+		//dto.setInteresesMoratorios(rs.getBigDecimal("intereses_moratorios"));
 		return dto;
 	}
 

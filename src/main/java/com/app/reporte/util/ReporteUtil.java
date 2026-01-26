@@ -184,55 +184,43 @@ public class ReporteUtil {
 											    	""";
     
     public static final String QUERY_INICIAL_V3 = """
-SELECT
-    acc.ide               AS account_id,       
-    acc.created_dt        AS fecha,            
-    c.external_id         AS prn,
-    cus.manage_external_id AS num_cliente,
-    acc.card_account_id   AS cuenta_asociada,
-    p.name                AS producto,
-    crl.amount            AS linea_credito,
-    CASE
+   SELECT
+    acc.ide                     AS account_id,
+    c.external_id               AS prn,
+    cus.manage_external_id      AS num_cliente,
+    acc.card_account_id         AS cuenta_asociada,
+    p.name                      AS producto,
+    crl.amount                  AS linea_credito,
+          CASE
         WHEN acc.days_on_default > 90 THEN 'Vencido'
         ELSE 'Vigente'
     END AS status,
     acc.days_on_default   AS dias_vencido,
-     CASE
+     CASE      
         WHEN acc.days_on_default BETWEEN 1 AND 30 THEN 1
         WHEN acc.days_on_default BETWEEN 31 AND 90 THEN 2
         WHEN acc.days_on_default > 90 THEN 3
         ELSE 0
-    END AS etapa,
-    ppg.expected_at       AS fecha_pago,
-    ppg.amount            AS pago_exigible,
-    acc.total_debt_amount AS capital_no_exigible,
-    ppg.amount            AS capital_exigible,
-    CASE
-        WHEN acc.days_on_default > 90 THEN COALESCE(iex.total_intereses, 0)
-        ELSE 0
-    END AS interes_exigible,
-    COALESCE(ipt.intereses_moratorios, 0) AS intereses_moratorios
+    END AS etapa, 
+    ppg.expected_at             AS fecha_pago,
+    ppg.amount                  AS pago_exigible,
+    acc.total_debt_amount 
+      - COALESCE(ppg.amount, 0) AS capital_no_exigible,
+    ppg.amount                  AS capital_exigible
 FROM db_datamart.credit_card c
-JOIN db_datamart.fact_account acc
-  ON acc.ide = c.fact_account_id
-JOIN db_datamart.dim_customer cus
-  ON acc.customer_id = cus.customer_id
-JOIN (
-    SELECT DISTINCT product_id, name
-    FROM db_datamart.dim_product
-) p
-  ON p.product_id = acc.product_id
-JOIN db_datamart.credit_line crl
-  ON crl.fact_account_id = acc.ide
-JOIN db_datamart.payment_promise_group ppg
-  ON acc.ide = ppg.fact_account_id
-LEFT JOIN db_datamart.vw_intereses_moratorios ipt
-  ON ipt.fact_account_id = acc.ide
-LEFT JOIN db_datamart.vw_total_intereses_por_cuenta iex
-  ON iex.account_id = acc.ide
-WHERE acc.created_dt >=  :startDate
-  AND acc.created_dt <   :endDate
-											    	""";
+JOIN db_datamart.fact_account acc  ON acc.ide = c.fact_account_id
+JOIN db_datamart.dim_customer cus  ON acc.customer_id = cus.customer_id
+JOIN db_datamart.dim_product p     ON p.product_id = acc.product_id
+LEFT JOIN db_datamart.credit_line crl 
+       ON crl.fact_account_id = acc.ide
+LEFT JOIN (
+    SELECT fact_account_id,
+           MAX(expected_at) AS expected_at,
+           MAX(amount) AS amount
+    FROM db_datamart.payment_promise_group
+    GROUP BY fact_account_id
+) ppg ON acc.ide = ppg.fact_account_id;
+						""";
     
     
     
@@ -262,6 +250,89 @@ WHERE acc.created_dt >=  :startDate
 	        WHERE auth_id = ?
 	        ORDER BY id  
     		""";
+    
+    public static final String QUERY_INSERT_INTERES_CUENTA = """
+   		
+   		INSERT INTO interes_cuenta (
+        prn,
+        fact_account_id,
+        interes_cuenta_balance,
+        interes_cuenta_orden
+    ) VALUES (
+        :prn,
+        :factAccountId,
+        :interesCuentaBalance,
+        :interesCuentaOrden
+    )
+
+   		""";
+    
+    
+    public static final String QUERY_CONSULTA_INTEREST = """
+       		
+SELECT
+    fa.ide AS fact_account_id,
+    COALESCE(rdd.interest_amount, 0) AS interest_revolving,
+    COALESCE(fdd.interest_amount, 0) AS interest_fixed,
+    COALESCE(rdd.interest_amount, 0) + COALESCE(fdd.interest_amount, 0) AS interest_total
+FROM fact_account fa
+LEFT JOIN revolving_debt_details rdd
+       ON rdd.fact_account_id = fa.ide
+LEFT JOIN fixed_debt_details fdd
+       ON fdd.fact_account_id = fa.ide
+WHERE fa.ide = :factAccountId;
+
+       		""";
+    
+    public static final String QUERY_INTERES_CUENTA = """
+    	    SELECT
+    	        id,
+    	        prn,
+    	        fact_account_id,
+    	        interes_cuenta_balance,
+    	        interes_cuenta_orden
+    	    FROM interes_cuenta
+    	    WHERE fact_account_id = :factAccountId
+    	    """;
+    
+    public static final String UPDATE_INTERES_CUENTA = """
+    	    UPDATE interes_cuenta
+    	    SET
+    	       interes_cuenta_orden   = :interesOrden
+    	    WHERE fact_account_id = :factAccountId
+    	    
+    	    """;
+    
+    public static final String UPDATE_INTERES_CUENTA_BALANCE = """
+    	    UPDATE interes_cuenta
+    	    SET
+    	       interes_cuenta_balance   = :interesBalance
+    	    WHERE fact_account_id = :factAccountId
+    	    
+    	    """;
+    
+    public static final String DELETE_INTERES_CUENTA_BY_ID = """
+    	    DELETE FROM interes_cuenta
+    	    WHERE id = :id
+    	""";
+    
+    
+    public static final String INTERES_MORATORIO_SUM = """
+    	    SELECT
+    COALESCE(SUM(default_interest_amount), 0) AS total_default_interest
+    FROM (
+    SELECT default_interest_amount FROM db_datamart.revolving_debt_details WHERE fact_account_id = :accountId
+    UNION ALL
+    SELECT default_interest_amount FROM db_datamart.revolving_tax_debt_details WHERE fact_account_id = :accountId
+    UNION ALL
+    SELECT default_interest_amount FROM db_datamart.fixed_debt_details WHERE fact_account_id = :accountId
+    UNION ALL
+    SELECT default_interest_amount FROM db_datamart.fixed_tax_debt_details WHERE fact_account_id = :accountId
+    ) t;
+    	""";
+
+    
+    
     public static final int COL_TRANSACCION=8;
     public static final int COL_TRANSACCION_V2=12;
     
@@ -459,7 +530,7 @@ WHERE acc.created_dt >=  :startDate
 
                 for (AccountReportWalletDTO t : account) {
                     Row row = sheet.createRow(rowNum++);
-                    row.createCell(0).setCellValue(nz("514817XXXXXX9087"));
+                    row.createCell(0).setCellValue(nz(t.getCard()));
                     row.createCell(1).setCellValue(nz(t.getPrn()));
                     row.createCell(2).setCellValue(nz(t.getNumCliente()));
                     row.createCell(3).setCellValue(nz(t.getCuentaAsociada()));
